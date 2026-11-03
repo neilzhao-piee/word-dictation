@@ -51,6 +51,15 @@ venv/bin/uvicorn app:app --host 0.0.0.0 --port 8090
 
 `testdata/` 里有三张合成样张（单词表、部分错误的答卷、全对答卷）和 `vision_test.py`（直接探测视觉端点的小工具），可用来跑通一次端到端流程。
 
+## 安卓 APK（可选）
+
+除了浏览器直接用，还可以装一个真正的安卓 APK（Capacitor 壳：网页资源打包进 APK，原生安卓 TTS 朗读，界面全离线加载）。
+
+- **壳工程**：[`apk-shell/`](apk-shell/)（`capacitor.config.json` + `build.sh`），appId `com.neilzhao.worddictation`。
+- **构建**：本机需要 JDK 21、Android SDK（`platforms;android-35`、`build-tools;35.0.0`）、Node 20+，然后 `bash apk-shell/build.sh`，产出 `apk-shell/word-dictation.apk`（debug 签名）。
+- **安装**：手机浏览器打开 `http://<服务器IP>:8090/word-dictation.apk` 下载，允许「安装未知来源」后安装。首次打开在首页「服务器地址」确认服务器地址（默认 `http://192.168.1.45:8090`，IP 变了在 App 里直接改）。
+- 注意：APK 只是壳，**拍照识别、判分仍走局域网服务器**，出了家里 Wi-Fi 不能用；前端改动后需重新构建 APK。未上架 Google Play（也没必要，家庭自用）。
+
 ## License
 
 MIT

@@ -11,3 +11,9 @@ wd_upload/
 # host-specific deploy helpers (see deploy/*.example instead)
 setup.sh
 upload45.py
+
+# APK build artifacts (see apk-shell/build.sh; only config/build.sh is tracked)
+apk-shell/node_modules/
+apk-shell/www/
+apk-shell/android/
+apk-shell/word-dictation.apk

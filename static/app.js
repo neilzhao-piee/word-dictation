@@ -4,6 +4,14 @@
 const view = document.getElementById('view');
 let voices = [];
 
+/* APK（Capacitor 壳）模式：API 走绝对地址，朗读改用安卓原生 TTS。
+   浏览器模式 window.Capacitor 不存在，行为与之前完全一致。 */
+const IS_NATIVE = typeof window.Capacitor !== 'undefined';
+const DEFAULT_SERVER = 'http://192.168.1.45:8090';
+const API_BASE = IS_NATIVE
+  ? (localStorage.getItem('serverUrl') || DEFAULT_SERVER).replace(/\/+$/, '')
+  : '';
+
 /* ------------------------------------------------------------------ util */
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
@@ -11,8 +19,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
 
 async function api(path, opts = {}) {
   const res = opts.form
-    ? await fetch(path, { method: opts.method || 'POST', body: opts.form })
-    : await fetch(path, {
+    ? await fetch(API_BASE + path, { method: opts.method || 'POST', body: opts.form })
+    : await fetch(API_BASE + path, {
         method: opts.method || 'GET',
         headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
         body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -69,10 +77,37 @@ function fail(err) {
 
 /* ------------------------------------------------------------------- tts */
 
-function loadVoices() { voices = speechSynthesis.getVoices(); }
-if ('speechSynthesis' in window) {
+const ttsPlugin = IS_NATIVE
+  ? (window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech) || null
+  : null;
+
+function loadVoices() {
+  if (ttsPlugin) {
+    if (typeof ttsPlugin.getVoices === 'function') {
+      Promise.resolve(ttsPlugin.getVoices())
+        .then((r) => {
+          const list = (r && r.voices) || r || [];
+          voices = list.map((v) => ({
+            voiceURI: v.name || v.id, name: v.name || v.id,
+            lang: String(v.lang || v.id || '').replace('_', '-').toLowerCase(),
+          }));
+        })
+        .catch(() => {});
+    }
+    return;
+  }
+  voices = speechSynthesis.getVoices();
+}
+if (ttsPlugin) {
+  loadVoices();
+} else if ('speechSynthesis' in window) {
   loadVoices();
   speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function cancelTTS() {
+  if (ttsPlugin) { try { ttsPlugin.stop(); } catch {} return; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
 function auVoices() {
@@ -89,10 +124,20 @@ function getVoice() {
 }
 
 function speak(word, slow = false) {
-  if (!('speechSynthesis' in window)) { alert('这台设备的浏览器不支持语音朗读'); return; }
-  speechSynthesis.cancel();
   const times = Math.min(3, Number(localStorage.getItem('repeat') || 1));
   const voice = getVoice();
+  if (ttsPlugin) {
+    cancelTTS();
+    const rate = slow ? 0.55 : 0.85;
+    for (let i = 0; i < times; i++) {
+      const opts = { text: word, lang: 'en-AU', rate, pitch: 1, volume: 0.9, queue: true };
+      if (voice && voice.voiceURI) opts.voice = voice.voiceURI;
+      Promise.resolve(ttsPlugin.speak(opts)).catch(() => {});
+    }
+    return;
+  }
+  if (!('speechSynthesis' in window)) { alert('这台设备的浏览器不支持语音朗读'); return; }
+  speechSynthesis.cancel();
   for (let i = 0; i < times; i++) {
     const u = new SpeechSynthesisUtterance(word);
     if (voice) u.voice = voice;
@@ -171,6 +216,16 @@ async function renderHome() {
       <a class="btn ghost" href="#/history">全部历史 →</a>
     </div>
 
+    ${IS_NATIVE ? `
+    <div class="card">
+      <h2>服务器地址</h2>
+      <div class="row">
+        <input id="serverUrl" style="flex:1" value="${esc(localStorage.getItem('serverUrl') || DEFAULT_SERVER)}">
+        <button class="btn ghost" id="serverSave">保存</button>
+      </div>
+      <p class="muted">App 连的是家里局域网的服务器；服务器 IP 变了就在这里改，保存后重新打开 App。</p>
+    </div>` : ''}
+
     <div class="card">
       <h2>发音设置</h2>
       ${noAU ? '<div class="warn">这台设备目前找不到澳洲英语（en-AU）语音，将用其它英语语音代替。iPhone 可在「设置 → 辅助功能 → 朗读内容 → 语音」下载 Australian English；Android 可在「文字与语音 → 文字转语音」下载澳洲口音语音包。</div>' : ''}
@@ -195,6 +250,16 @@ async function renderHome() {
         `<option value="${esc(v.voiceURI)}" ${voice && v.voiceURI === voice.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)}${auVoices().includes(v) ? ' 🇦🇺' : ''})</option>`).join('')
     : '<option value="">（浏览器没有英语语音）</option>';
   sel.onchange = () => localStorage.setItem('voiceURI', sel.value);
+
+  if (IS_NATIVE) {
+    const sIn = document.getElementById('serverUrl');
+    document.getElementById('serverSave').onclick = () => {
+      const v = (sIn.value || '').trim().replace(/\/+$/, '');
+      if (!/^https?:\/\//.test(v)) { alert('地址要以 http:// 或 https:// 开头'); return; }
+      localStorage.setItem('serverUrl', v);
+      location.reload();
+    };
+  }
 
   const rep = document.getElementById('repeatSel');
   rep.value = localStorage.getItem('repeat') || '1';
@@ -536,7 +601,7 @@ async function renderReviewPool() {
 /* --------------------------------------------------------------- router */
 
 function route() {
-  speechSynthesis.cancel();
+  cancelTTS();
   const parts = (location.hash.replace(/^#\//, '') || '').split('/');
   const name = parts[0] || '';
   const id = parts[1] ? Number(parts[1]) : null;

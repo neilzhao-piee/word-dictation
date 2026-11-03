@@ -1,0 +1,11 @@
+{
+  "appId": "com.neilzhao.worddictation",
+  "appName": "听写小助手",
+  "webDir": "www",
+  "android": {
+    "allowCleartextTraffic": true
+  },
+  "plugins": {
+    "TextToSpeech": {}
+  }
+}
