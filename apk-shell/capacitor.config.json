@@ -2,6 +2,9 @@
   "appId": "com.neilzhao.worddictation",
   "appName": "听写小助手",
   "webDir": "www",
+  "server": {
+    "androidScheme": "http"
+  },
   "android": {
     "allowCleartextTraffic": true
   },

@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -73,6 +74,15 @@ def grade_prompt(words: list[str]) -> str:
 
 
 app = FastAPI(title="听写小助手")
+
+# 安卓 APK 里页面源是 capacitor://localhost（iOS）/ https://localhost（安卓），
+# 属于跨源请求，必须显式放行；浏览器直接访问时是同源，不受影响。
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"(https?|capacitor)://localhost(:\d+)?",
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # --------------------------------------------------------------------------
