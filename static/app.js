@@ -72,7 +72,16 @@ function shuffle(arr) {
 }
 
 function fail(err) {
-  view.innerHTML += `<div class="warn">出错了：${esc(err.message || err)}</div>`;
+  const raw = err && err.message ? err.message : String(err);
+  const connErr = err instanceof TypeError || /fetch|network|load failed|ERR_/i.test(raw);
+  const hint = connErr
+    ? `<br><span class="muted">${
+        IS_NATIVE
+          ? `App 要连的服务器是 ${esc(API_BASE)}。请确认手机连的是家里的 Wi-Fi（和服务器同一个局域网）；服务器地址不对可在首页「服务器地址」里修改。`
+          : `连不上服务器。请确认手机连的是家里的 Wi-Fi，或直接在浏览器访问 ${esc(location.origin)}。`
+      }</span>`
+    : '';
+  view.innerHTML += `<div class="warn">出错了：${esc(raw)}${hint}</div>`;
 }
 
 /* ------------------------------------------------------------------- tts */
@@ -172,7 +181,10 @@ async function renderHome() {
   let stats, sessions;
   try {
     [stats, sessions] = await Promise.all([api('/api/stats'), api('/api/sessions?status=all&limit=20')]);
-  } catch (e) { return fail(e); }
+  } catch (e) {
+    if (IS_NATIVE) return renderOfflineHome();
+    return fail(e);
+  }
 
   const unfinished = sessions.filter((s) => s.status !== 'done');
   const weeks = stats.weeks || [];
@@ -273,6 +285,28 @@ async function renderHome() {
       catch (e) { fail(e); }
     };
   });
+}
+
+function renderOfflineHome() {
+  view.innerHTML = `
+    <div class="card">
+      <h2>连不上服务器</h2>
+      <div class="warn">连不上家里的服务器（默认 ${esc(DEFAULT_SERVER)}）。请先确认手机连的是<b>家里的 Wi-Fi</b>（App 的识别、判分都要经过家里的服务器；听写发音本身不需要）。<br>如果服务器的地址变了，在下面改好后保存。</div>
+      <div class="row">
+        <input id="serverUrl" style="flex:1" value="${esc(localStorage.getItem('serverUrl') || DEFAULT_SERVER)}">
+        <button class="btn ghost" id="serverSave">保存</button>
+        <button class="btn big" id="retryBtn">重试</button>
+      </div>
+      <p class="muted">保存后会自动重新连接；还是不行就检查手机连的 Wi-Fi 是不是家里这个。</p>
+    </div>`;
+  const sIn = document.getElementById('serverUrl');
+  document.getElementById('serverSave').onclick = () => {
+    const v = (sIn.value || '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(v)) { alert('地址要以 http:// 或 https:// 开头'); return; }
+    localStorage.setItem('serverUrl', v);
+    location.reload();
+  };
+  document.getElementById('retryBtn').onclick = () => renderHome();
 }
 
 async function renderNew() {
