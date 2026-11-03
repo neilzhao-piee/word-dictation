@@ -1,0 +1,13 @@
+# local runtime state
+data/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.log
+wd_upload/
+.DS_Store
+
+# host-specific deploy helpers (see deploy/*.example instead)
+setup.sh
+upload45.py

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Example installer for a Linux/systemd host. Run as root from the repo root.
+# Adjust WD_USER (dedicated system user) before running.
+set -eux
+
+WD_USER="${WD_USER:-worddict}"
+APP_DIR=/opt/word-dictation
+
+id "$WD_USER" >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin "$WD_USER"
+
+mkdir -p "$APP_DIR/data"
+cp -a app.py requirements.txt "$APP_DIR"/
+cp -a static "$APP_DIR"/static
+chown -R "$WD_USER":"$WD_USER" "$APP_DIR"
+
+sudo -u "$WD_USER" bash -c "cd $APP_DIR && python3 -m venv venv && ./venv/bin/pip install -q -r requirements.txt"
+
+install -m 644 deploy/worddict.service.example /etc/systemd/system/worddict.service
+sed -i "s/^User=worddict/User=$WD_USER/" /etc/systemd/system/worddict.service
+
+systemctl daemon-reload
+systemctl enable --now worddict
+sleep 3
+systemctl is-active worddict
+ss -ltn | grep 8090 || true
+curl -s -o /dev/null -w "local curl stats: %{http_code}\n" http://127.0.0.1:8090/api/stats
