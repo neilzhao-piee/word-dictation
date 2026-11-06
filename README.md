@@ -57,7 +57,8 @@ venv/bin/uvicorn app:app --host 0.0.0.0 --port 8090
 
 - **壳工程**：[`apk-shell/`](apk-shell/)（`capacitor.config.json` + `build.sh`），appId `com.neilzhao.worddictation`。
 - **构建**：本机需要 JDK 21、Android SDK（`platforms;android-35`、`build-tools;35.0.0`）、Node 20+，然后 `bash apk-shell/build.sh`，产出 `apk-shell/word-dictation.apk`（debug 签名）。
-- **安装**：手机浏览器打开 `http://<服务器IP>:8090/word-dictation.apk` 下载，允许「安装未知来源」后安装。首次打开在首页「服务器地址」确认服务器地址（默认 `http://192.168.1.45:8090`，IP 变了在 App 里直接改）。
+  要预置服务器地址就带上环境变量：`WD_SERVER=http://你的服务器:8090 bash apk-shell/build.sh`（源码里不存内网地址，模板在 `static/server-config.js`）。
+- **安装**：手机浏览器打开 `http://<服务器IP>:8090/word-dictation.apk` 下载，允许「安装未知来源」后安装。首次打开在首页「服务器地址」填你的服务器地址（例如 `http://<服务器IP>:8090`），保存后以后就不用再填。
 - 注意：APK 只是壳，**拍照识别、判分仍走局域网服务器**，出了家里 Wi-Fi 不能用；前端改动后需重新构建 APK。未上架 Google Play（也没必要，家庭自用）。
 
 ## License

@@ -7,7 +7,14 @@ let voices = [];
 /* APK（Capacitor 壳）模式：API 走绝对地址，朗读改用安卓原生 TTS。
    浏览器模式 window.Capacitor 不存在，行为与之前完全一致。 */
 const IS_NATIVE = typeof window.Capacitor !== 'undefined';
-const DEFAULT_SERVER = 'http://192.168.1.45:8090';
+/* 服务器默认地址：源码里不留内网地址。
+   - 浏览器模式（部署在服务器上）：走相对路径，不需要这个值。
+   - APK 模式：优先用「服务器地址」里保存过的值；否则用构建时注入的
+     window.WD_DEFAULT_SERVER（见 static/server-config.js 与 apk-shell/build.sh）。
+     两个都为空时，首次打开会提示你填地址。 */
+const DEFAULT_SERVER = String(
+  (typeof window.WD_DEFAULT_SERVER === 'string' && window.WD_DEFAULT_SERVER) || ''
+).trim();
 const API_BASE = IS_NATIVE
   ? (localStorage.getItem('serverUrl') || DEFAULT_SERVER).replace(/\/+$/, '')
   : '';
@@ -232,7 +239,7 @@ async function renderHome() {
     <div class="card">
       <h2>服务器地址</h2>
       <div class="row">
-        <input id="serverUrl" style="flex:1" value="${esc(localStorage.getItem('serverUrl') || DEFAULT_SERVER)}">
+        <input id="serverUrl" style="flex:1" placeholder="http://你的服务器地址:8090" value="${esc(localStorage.getItem('serverUrl') || DEFAULT_SERVER)}">
         <button class="btn ghost" id="serverSave">保存</button>
       </div>
       <p class="muted">App 连的是家里局域网的服务器；服务器 IP 变了就在这里改，保存后重新打开 App。</p>
@@ -291,9 +298,9 @@ function renderOfflineHome() {
   view.innerHTML = `
     <div class="card">
       <h2>连不上服务器</h2>
-      <div class="warn">连不上家里的服务器（默认 ${esc(DEFAULT_SERVER)}）。请先确认手机连的是<b>家里的 Wi-Fi</b>（App 的识别、判分都要经过家里的服务器；听写发音本身不需要）。<br>如果服务器的地址变了，在下面改好后保存。</div>
+      <div class="warn">连不上家里的服务器${DEFAULT_SERVER ? `（默认 ${esc(DEFAULT_SERVER)}）` : '（还没设置服务器地址）'}。请先确认手机连的是<b>家里的 Wi-Fi</b>（App 的识别、判分都要经过家里的服务器；听写发音本身不需要）。<br>如果服务器的地址变了，在下面改好后保存。</div>
       <div class="row">
-        <input id="serverUrl" style="flex:1" value="${esc(localStorage.getItem('serverUrl') || DEFAULT_SERVER)}">
+        <input id="serverUrl" style="flex:1" placeholder="http://你的服务器地址:8090" value="${esc(localStorage.getItem('serverUrl') || DEFAULT_SERVER)}">
         <button class="btn ghost" id="serverSave">保存</button>
         <button class="btn big" id="retryBtn">重试</button>
       </div>

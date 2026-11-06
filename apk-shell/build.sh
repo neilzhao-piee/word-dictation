@@ -10,6 +10,12 @@ cd "$(dirname "$0")/.."
 echo "==> 同步网页资源进壳工程"
 rm -rf apk-shell/www && mkdir -p apk-shell/www/assets
 cp static/index.html static/app.js static/style.css static/manifest.webmanifest apk-shell/www/
+# 默认服务器地址（可选）：源码里不留内网地址，构建时再注入
+if [ -n "${WD_SERVER:-}" ]; then
+  printf "window.WD_DEFAULT_SERVER = '%s';\n" "$WD_SERVER" > apk-shell/www/server-config.js
+else
+  cp static/server-config.js apk-shell/www/
+fi
 cp static/icon-192.png apk-shell/www/assets/icon.png
 cp static/icon-512.png apk-shell/www/assets/splash.png
 
