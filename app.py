@@ -189,7 +189,8 @@ def vision(prompt: str, image_bytes: bytes, image_type: str) -> str:
         raise HTTPException(502, f"视觉模型返回异常：{out}") from exc
 
 
-def extract_json(text: str):
+def try_parse_json(text: str):
+    """Lenient JSON object/array extraction; returns None when absent."""
     t = text.strip()
     m = re.search(r"```(?:json)?\s*(.*?)```", t, re.S)
     if m:
@@ -213,7 +214,25 @@ def extract_json(text: str):
                         return json.loads(t[start : i + 1])
                     except json.JSONDecodeError:
                         break
-    raise HTTPException(502, f"模型没能返回可解析的 JSON：{text[:300]}")
+    return None
+
+
+def extract_json(text: str):
+    obj = try_parse_json(text)
+    if obj is None:
+        raise HTTPException(502, f"模型没能返回可解析的 JSON：{text[:300]}")
+    return obj
+
+
+def ocr_text_tokens(text: str) -> list[str]:
+    """Raw transcription from OCR-only vision models: one entry per line,
+    extra whitespace/duplicates preserved (attempts must keep repeats)."""
+    out = []
+    for line in text.splitlines():
+        line = re.sub(r"^\s*\d+[.)]?\s*", "", line).strip().strip(".,;:*#")
+        if line:
+            out.append(line)
+    return out
 
 
 WORD_RE = re.compile(r"^[A-Za-z][A-Za-z'’-]*$")
@@ -282,10 +301,12 @@ async def create_session(photo: UploadFile = File(...)):
     if len(data) > 20 * 1024 * 1024:
         raise HTTPException(400, "photo too large (>20MB)")
     text = vision(OCR_PROMPT, data, photo.content_type or "image/jpeg")
-    parsed = extract_json(text)
-    if not isinstance(parsed, list):
-        raise HTTPException(502, f"模型返回的不是单词数组：{text[:300]}")
-    words = sanitize_words(parsed)
+    parsed = try_parse_json(text)
+    if isinstance(parsed, list):
+        words = sanitize_words(parsed)
+    else:
+        # OCR-only vision models return plain lines instead of JSON
+        words = sanitize_words(ocr_text_tokens(text))
     if not words:
         raise HTTPException(422, "照片里没能识别出单词，换一张更清晰的照片试试")
     created = now_iso()
@@ -344,11 +365,33 @@ async def complete_session(sid: int, photo: UploadFile = File(...)):
         raise HTTPException(400, "photo too large (>20MB)")
 
     text = vision(grade_prompt(words), data, photo.content_type or "image/jpeg")
-    parsed = extract_json(text)
-    if not isinstance(parsed, dict):
-        raise HTTPException(502, f"判分结果格式异常：{text[:300]}")
-
+    parsed = try_parse_json(text)
     word_set = {norm(w): w for w in words}
+    if not (isinstance(parsed, dict) and isinstance(parsed.get("attempts"), list)):
+        # OCR-only vision models transcribe handwriting as plain lines.
+        # Map each written token to an expected word deterministically:
+        # exact norm match first, then closest unused word; correctness is
+        # always recomputed here (the model never decides right/wrong).
+        raw_items = []
+        unused = [norm(w) for w in words]
+        for written in ocr_text_tokens(text):
+            for token in written.split():
+                wn = norm(token)
+                if not wn or not re.fullmatch(r"[a-z][a-z'-]*", wn):
+                    continue
+                if wn in unused:
+                    expected_wn = wn
+                elif wn in word_set:
+                    expected_wn = wn           # repeated correct attempt
+                else:
+                    cand = difflib.get_close_matches(wn, unused, n=1, cutoff=0.55)
+                    if not cand:
+                        cand = difflib.get_close_matches(wn, list(word_set), n=1, cutoff=0.7)
+                    expected_wn = cand[0] if cand else None
+                if expected_wn is not None and expected_wn in unused:
+                    unused.remove(expected_wn)
+                raw_items.append({"written": token, "expected": word_set.get(expected_wn or "", None), "correct": wn == expected_wn})
+        parsed = {"attempts": raw_items, "missing": [], "notes": ""}
     attempts_out = []
     for att in parsed.get("attempts", []) or []:
         written = str(att.get("written", "")).strip()
